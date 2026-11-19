@@ -574,7 +574,7 @@ function previaManual() {
   $('#o-temp').textContent = `${fmt(t)} °C`;
   $('#o-hum').textContent = `${h} %`;
   $('#o-gas').textContent = `${g} mV`;
-  const pg = Math.min(100, Math.max(0, ((g - 525) / (2500 - 525)) * 100));
+  const pg = Math.min(100, Math.max(0, ((g - 250) / (1800 - 250)) * 100));
   const pt = Math.min(100, Math.max(0, ((t - 20) / 40) * 100));
   const ir = 0.7 * pg + 0.3 * pt;
   const n = ir >= 75 || t > 40 || pg > 85 || llama ? 3 : ir >= 52 ? 2 : ir >= 30 ? 1 : 0;

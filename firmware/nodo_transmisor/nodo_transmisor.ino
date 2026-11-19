@@ -32,11 +32,12 @@ const int PIN_BOTON  = 23;
 const int PIN_SDA    = 21;
 const int PIN_SCL    = 22;
 
+const bool USAR_BOMBA       = false;  // true cuando la bomba y el relé estén conectados
 const bool LED_ANODO_COMUN  = false;
 const bool RELE_ACTIVO_ALTO = true;
 
-const float GAS_MIN_MV  = 525.0;
-const float GAS_MAX_MV  = 2500.0;
+const float GAS_MIN_MV  = 250.0;
+const float GAS_MAX_MV  = 1800.0;
 const float TEMP_MIN_C  = 20.0;
 const float TEMP_MAX_C  = 60.0;
 const float PESO_GAS    = 0.70;
@@ -155,6 +156,7 @@ void actualizarVallas() {
 
 // Maneja la bomba por ráfagas cortas mientras la alarma está activa.
 void actualizarBomba() {
+  if (!USAR_BOMBA) return;
   if (!alarmaLatched || rafagas >= MAX_RAFAGAS) {
     if (releEncendido) setRele(false);
     return;
@@ -246,7 +248,7 @@ void evaluar() {
   portENTER_CRITICAL(&mux);
   datos = {secuencia, ultimaT, ultimaH, gasMv, pGas, pTemp, ir, llamaMv, nivelActual,
            calentando, llama, anguloObjetivo == ANGULO_CERRADA, releEncendido,
-           alarmaLatched && rafagas < MAX_RAFAGAS, alarmaLatched};
+           USAR_BOMBA && alarmaLatched && rafagas < MAX_RAFAGAS, alarmaLatched};
   portEXIT_CRITICAL(&mux);
 
   Serial.printf("DATA,%lu,%.2f,%.1f,%.0f,%.1f,%.1f,%.1f,%u,%u,%.0f,%u,%u\n",

@@ -112,7 +112,7 @@ curl -X POST http://localhost:3000/api/lecturas -H "Content-Type: application/js
 
 ## Lógica de niveles
 
-`IR = 0,70 · pGas + 0,30 · pTemp`, con `pGas = (gasMv − 525) / (2500 − 525) × 100` y `pTemp = (T − 20) / (60 − 20) × 100`, ambos entre 0 y 100.
+`IR = 0,70 · pGas + 0,30 · pTemp`, con `pGas = (gasMv − 250) / (1800 − 250) × 100` y `pTemp = (T − 20) / (60 − 20) × 100`, ambos entre 0 y 100.
 
 | Nivel | Condición | Maqueta |
 |---|---|---|

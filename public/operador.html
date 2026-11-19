@@ -307,7 +307,7 @@
           <form id="form-manual" class="manual">
             <label>Temperatura <output id="o-temp">25 °C</output><input type="range" name="temp" min="10" max="60" step="0.5" value="25" /></label>
             <label>Humedad <output id="o-hum">50 %</output><input type="range" name="hum" min="5" max="100" step="1" value="50" /></label>
-            <label>Gas MQ-2 <output id="o-gas">700 mV</output><input type="range" name="gasMv" min="300" max="3000" step="10" value="700" /></label>
+            <label>Gas MQ-2 <output id="o-gas">400 mV</output><input type="range" name="gasMv" min="100" max="2500" step="10" value="400" /></label>
             <label class="manual__check"><input type="checkbox" name="llama" /> Llama presente</label>
             <p class="manual__prev">IR estimado: <b id="manual-ir">—</b> → nivel <b id="manual-nivel">—</b></p>
             <button class="btn btn--pri" type="submit">Aplicar valores</button>
@@ -347,7 +347,7 @@
         <div>
           <h3>Índice de riesgo</h3>
           <p class="formula">IR = 0,70 · pGas + 0,30 · pTemp</p>
-          <p class="muted">pGas = (gas mV − 525) / (2500 − 525) × 100<br />pTemp = (T − 20) / (60 − 20) × 100<br />Ambos limitados entre 0 y 100. Para bajar de nivel el IR tiene que caer 3 puntos por debajo del umbral (histéresis).</p>
+          <p class="muted">pGas = (gas mV − 250) / (1800 − 250) × 100<br />pTemp = (T − 20) / (60 − 20) × 100<br />Ambos limitados entre 0 y 100. Para bajar de nivel el IR tiene que caer 3 puntos por debajo del umbral (histéresis).</p>
         </div>
         <table class="tabla tabla--niveles">
           <thead><tr><th>Nivel</th><th>Condición</th><th>Respuesta de la maqueta</th></tr></thead>

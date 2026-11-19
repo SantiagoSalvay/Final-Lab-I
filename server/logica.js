@@ -2,8 +2,8 @@
 // Lógica del nodo replicada en JS: misma fórmula, umbrales, histéresis y rearme que nodo_transmisor.ino.
 
 const CFG = Object.freeze({
-  GAS_MIN_MV: 525,
-  GAS_MAX_MV: 2500,
+  GAS_MIN_MV: 250,
+  GAS_MAX_MV: 1800,
   T_MIN: 20,
   T_MAX: 60,
   W_GAS: 0.7,

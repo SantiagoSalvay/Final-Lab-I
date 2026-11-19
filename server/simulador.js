@@ -4,10 +4,10 @@
 const L = require('./logica');
 
 const ESCENARIOS = {
-  normal: { temp: 23.5, hum: 52, gasMv: 640, llamaMv: 3150, desc: 'Condiciones normales en el sendero' },
-  precaucion: { temp: 29, hum: 38, gasMv: 1350, llamaMv: 3120, desc: 'Humo leve y temperatura en aumento' },
-  alerta: { temp: 34, hum: 27, gasMv: 1950, llamaMv: 3080, desc: 'Humo denso, ambiente seco y caluroso' },
-  incendio: { temp: 46, hum: 18, gasMv: 2420, llamaMv: 380, desc: 'Foco de fuego detectado junto al nodo' },
+  normal: { temp: 23.5, hum: 52, gasMv: 400, llamaMv: 3150, desc: 'Condiciones normales en el sendero' },
+  precaucion: { temp: 29, hum: 38, gasMv: 920, llamaMv: 3120, desc: 'Humo leve y temperatura en aumento' },
+  alerta: { temp: 34, hum: 27, gasMv: 1350, llamaMv: 3080, desc: 'Humo denso, ambiente seco y caluroso' },
+  incendio: { temp: 46, hum: 18, gasMv: 1750, llamaMv: 380, desc: 'Foco de fuego detectado junto al nodo' },
 };
 
 const ruido = (amp) => (Math.random() * 2 - 1) * amp;

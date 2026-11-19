@@ -17,7 +17,9 @@ La versión de Jefe ya tenía OLED, botón de rearme, bomba por ráfagas, histé
 | Rearme remoto (`rearmeRemoto`) | Si el panel pide rearmar, el servidor responde `"rearme":true`; la tarea de red levanta la bandera y el `loop` llama a `rearmar()`, con las mismas reglas que el botón |
 | Pila de la tarea de red de 8192 a 12288 | Margen para HTTPS si se usa Render |
 
-Todo lo demás (pines, umbrales, `HIST_IR = 3`, bomba 3 s / 5 s con 6 ráfagas, `GAS_OVERRIDE_P = 85`, `LLAMA_UMBRAL_MV = 1800`) quedó como lo tenía Jefe.
+| `rociador` vale `false` si `USAR_BOMBA` está apagado | Para que la página no muestre el rociador activo cuando la bomba no está conectada |
+
+Todo lo demás (pines, umbrales, `HIST_IR = 3`, bomba 3 s / 5 s con 6 ráfagas, `GAS_OVERRIDE_P = 85`, `LLAMA_UMBRAL_MV = 1800`, la calibración del MQ-2 `GAS_MIN_MV = 250` / `GAS_MAX_MV = 1800` y `USAR_BOMBA`) quedó como lo tiene Jefe en su última versión.
 
 ## Antes de cargarlo
 
@@ -46,7 +48,7 @@ Todo lo demás (pines, umbrales, `HIST_IR = 3`, bomba 3 s / 5 s con 6 ráfagas, 
 
 **`actualizarVallas()`** — Lleva los dos servos hacia el ángulo objetivo (0° abiertas, 90° cerradas) de a 2° cada 20 ms. Tarda unos 0,9 s en cerrar y no bloquea.
 
-**`actualizarBomba()`** — Con la alarma enclavada, prende el relé 3 s y lo apaga 5 s, hasta 6 ráfagas. Al enclavarse, `tBomba` se adelanta para que la primera ráfaga arranque enseguida. Sin alarma, el relé queda apagado.
+**`actualizarBomba()`** — Solo actúa si `USAR_BOMBA = true` (se deja en `false` mientras la bomba no esté conectada). Con la alarma enclavada, prende el relé 3 s y lo apaga 5 s, hasta 6 ráfagas. Al enclavarse, `tBomba` se adelanta para que la primera ráfaga arranque enseguida. Sin alarma, el relé queda apagado.
 
 **`rearmar()`** — Libera el enclavamiento solo si ya no hay condición de alarma; si sigue, lo rechaza y lo avisa por el puerto serie. Al rearmar se reinician las ráfagas y se apaga la bomba; las vallas se abren solas en el siguiente ciclo.
 
@@ -55,7 +57,7 @@ Todo lo demás (pines, umbrales, `HIST_IR = 3`, bomba 3 s / 5 s con 6 ráfagas, 
 **`mostrarOled()`** — Cada 500 ms muestra el nombre del nivel en grande, temperatura, humedad, gas, IR, llama, vallas, bomba, precalentamiento y el estado del WiFi con el último código HTTP (200 = el servidor recibió el dato).
 
 **`evaluar()`** — Se ejecuta una vez por segundo:
-1. Lee los sensores y calcula `pGas = (gasMv − 525) / (2500 − 525) × 100`, `pTemp = (T − 20) / (60 − 20) × 100` e `IR = 0,70 · pGas + 0,30 · pTemp`.
+1. Lee los sensores y calcula `pGas = (gasMv − 250) / (1800 − 250) × 100`, `pTemp = (T − 20) / (60 − 20) × 100` e `IR = 0,70 · pGas + 0,30 · pTemp`.
 2. Condición de alarma: llama (KY-026 < 1800 mV) en cualquier momento; además, pasado el precalentamiento de 60 s del MQ-2, IR ≥ 75, T > 40 °C o pGas > 85 %.
 3. Si aparece la condición, se enclava la alarma (nivel 3) y arranca la bomba.
 4. El nivel mostrado es 3 si está enclavada, o el de `nivelDesdeIr` si no (0 durante el precalentamiento).

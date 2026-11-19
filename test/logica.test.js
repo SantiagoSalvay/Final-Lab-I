@@ -6,12 +6,15 @@ const L = require('../server/logica');
 const base = { ir: 0, temp: 25, pg: 0, llama: false, calentando: false, pedirRearme: false };
 const evaluar = (estado, ir, extra = {}) => L.evaluarNivel(estado, { ...base, ir, ...extra });
 
-test('fórmula del IR coincide con el ejemplo del documento', () => {
+test('fórmula del IR con la calibración del MQ-2 (250 a 1800 mV)', () => {
+  assert.strictEqual(L.pGas(250), 0);
+  assert.strictEqual(L.pGas(1025), 50);
+  assert.strictEqual(L.pGas(1800), 100);
   const pg = L.pGas(640);
   const pt = L.pTemp(24.5);
-  assert.ok(Math.abs(pg - 5.8) < 0.06);
+  assert.ok(Math.abs(pg - 25.2) < 0.06);
   assert.ok(Math.abs(pt - 11.3) < 0.06);
-  assert.ok(Math.abs(L.indiceRiesgo(pg, pt) - 7.5) < 0.06);
+  assert.ok(Math.abs(L.indiceRiesgo(pg, pt) - 21.0) < 0.06);
 });
 
 test('pGas y pTemp quedan limitados entre 0 y 100', () => {
