@@ -125,7 +125,7 @@ async function manejar(req, res) {
 
   try {
     // El nodo ESP32 (o el puente serie) publica una lectura.
-    if (p === '/api/lecturas' && req.method === 'POST') {
+    if ((p === '/api/lecturas' || p === '/api/datos') && req.method === 'POST') {
       if (!esNodo(req, url)) return json(res, 401, { ok: false, error: 'token inválido' });
       const cuerpo = await leerCuerpo(req);
       const lote = Array.isArray(cuerpo) ? cuerpo : [cuerpo];
@@ -139,6 +139,16 @@ async function manejar(req, res) {
       const rearme = rearmeRemoto > 0 && Date.now() - rearmeRemoto < 30000;
       if (rearme) rearmeRemoto = 0;
       return json(res, 200, { ok: true, rearme, servidor_ts: Date.now() });
+    }
+
+    // Abierto desde el navegador: confirma que el servidor está accesible.
+    if (p === '/api/lecturas' || p === '/api/datos') {
+      const u = almacen.ultimo;
+      return json(res, 200, {
+        ok: true,
+        mensaje: 'Servidor SATI accesible. El nodo ESP32 tiene que enviar sus lecturas a esta URL con HTTP POST (JSON).',
+        ultima_lectura: u ? { seq: u.seq, origen: u.origen, hace_s: Math.round((Date.now() - u.ts) / 1000) } : null,
+      });
     }
 
     if (p === '/api/stream' && req.method === 'GET') {

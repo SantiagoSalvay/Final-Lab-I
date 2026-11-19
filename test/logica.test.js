@@ -3,8 +3,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const L = require('../server/logica');
 
-const evaluar = (estado, ir, extra = {}) =>
-  L.evaluarNivel(estado, { ir, temp: 25, pg: 0, llama: false, calentando: false, pedirRearme: false, ...extra });
+const base = { ir: 0, temp: 25, pg: 0, llama: false, calentando: false, pedirRearme: false };
+const evaluar = (estado, ir, extra = {}) => L.evaluarNivel(estado, { ...base, ir, ...extra });
 
 test('fórmula del IR coincide con el ejemplo del documento', () => {
   const pg = L.pGas(640);
@@ -22,44 +22,51 @@ test('pGas y pTemp quedan limitados entre 0 y 100', () => {
 });
 
 test('subida inmediata por umbrales de IR', () => {
-  const e = { nivel: 0, enclavado: false };
+  const e = { nivelBase: 0, enclavado: false };
   assert.strictEqual(evaluar(e, 29.9).nivel, 0);
   assert.strictEqual(evaluar(e, 30).nivel, 1);
   assert.strictEqual(evaluar(e, 52).nivel, 2);
   assert.strictEqual(evaluar(e, 75).nivel, 3);
 });
 
-test('histéresis: baja solo 5 puntos por debajo del umbral', () => {
-  assert.strictEqual(evaluar({ nivel: 2, enclavado: false }, 48).nivel, 2);
-  assert.strictEqual(evaluar({ nivel: 2, enclavado: false }, 46.9).nivel, 1);
-  assert.strictEqual(evaluar({ nivel: 1, enclavado: false }, 26).nivel, 1);
-  assert.strictEqual(evaluar({ nivel: 1, enclavado: false }, 24).nivel, 0);
-  assert.strictEqual(evaluar({ nivel: 2, enclavado: false }, 10).nivel, 0);
+test('histéresis de 3 puntos para bajar (nivelDesdeIr)', () => {
+  assert.strictEqual(evaluar({ nivelBase: 2 }, 49).nivel, 2);
+  assert.strictEqual(evaluar({ nivelBase: 2 }, 48.9).nivel, 1);
+  assert.strictEqual(evaluar({ nivelBase: 1 }, 27).nivel, 1);
+  assert.strictEqual(evaluar({ nivelBase: 1 }, 26.9).nivel, 0);
+  assert.strictEqual(evaluar({ nivelBase: 2 }, 10).nivel, 0);
 });
 
 test('disparos directos a nivel 3: T > 40, pGas > 85, llama', () => {
-  const e = { nivel: 0, enclavado: false };
+  const e = { nivelBase: 0, enclavado: false };
   assert.strictEqual(evaluar(e, 10, { temp: 40.1 }).nivel, 3);
   assert.strictEqual(evaluar(e, 10, { temp: 40 }).nivel, 0);
   assert.strictEqual(evaluar(e, 10, { pg: 85.1 }).nivel, 3);
   assert.strictEqual(evaluar(e, 10, { llama: true }).nivel, 3);
 });
 
-test('nivel 3 queda enclavado hasta el rearme', () => {
-  let e = evaluar({ nivel: 0, enclavado: false }, 80);
+test('nivel 3 queda enclavado hasta el rearme, que se rechaza con la alarma activa', () => {
+  let e = evaluar({ nivelBase: 0, enclavado: false }, 80);
   assert.deepStrictEqual([e.nivel, e.enclavado], [3, true]);
   e = evaluar(e, 5);
   assert.strictEqual(e.nivel, 3);
-  const rechazado = evaluar({ nivel: 3, enclavado: true }, 80, { pedirRearme: true });
+  const rechazado = evaluar({ nivelBase: 2, enclavado: true }, 80, { pedirRearme: true });
   assert.ok(rechazado.rearmeRechazado);
   assert.strictEqual(rechazado.nivel, 3);
-  const ok = evaluar({ nivel: 3, enclavado: true }, 35, { pedirRearme: true });
+  const ok = evaluar({ nivelBase: 2, enclavado: true }, 35, { pedirRearme: true });
   assert.ok(ok.rearmado);
   assert.deepStrictEqual([ok.nivel, ok.enclavado], [1, false]);
 });
 
 test('precalentamiento: nivel 0 salvo llama', () => {
-  const e = { nivel: 0, enclavado: false };
-  assert.strictEqual(evaluar(e, 90, { calentando: true, pg: 95 }).nivel, 0);
+  const e = { nivelBase: 0, enclavado: false };
+  assert.strictEqual(evaluar(e, 90, { calentando: true, pg: 95, temp: 45 }).nivel, 0);
   assert.strictEqual(evaluar(e, 0, { calentando: true, llama: true }).nivel, 3);
+});
+
+test('bomba: 3 s encendida, 5 s apagada, hasta 6 ráfagas', () => {
+  assert.deepStrictEqual(L.estadoBomba(0), { rociador: true, bomba: true });
+  assert.deepStrictEqual(L.estadoBomba(3500), { rociador: true, bomba: false });
+  assert.deepStrictEqual(L.estadoBomba(8000), { rociador: true, bomba: true });
+  assert.deepStrictEqual(L.estadoBomba(6 * 8000), { rociador: false, bomba: false });
 });

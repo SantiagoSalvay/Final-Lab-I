@@ -102,10 +102,10 @@ curl -X POST http://localhost:3000/api/lecturas -H "Content-Type: application/js
 | 0 Normal | IR < 30 | LED verde |
 | 1 Precaución | IR ≥ 30 | LED amarillo |
 | 2 Alerta | IR ≥ 52 | LED rojo fijo, buzzer intermitente |
-| 3 Alarma | IR ≥ 75, T > 40 °C, pGas > 85 % o llama | LED rojo parpadeando, buzzer continuo, vallas a 90°, bomba 2 s / 4 s |
+| 3 Alarma | IR ≥ 75, T > 40 °C, pGas > 85 % o llama | LED rojo parpadeando, buzzer continuo, vallas a 90°, bomba 3 s / 5 s (hasta 6 ráfagas) |
 
-- **Histéresis:** para bajar de nivel, el IR tiene que quedar 5 puntos por debajo del umbral.
-- **Enclavamiento:** el nivel 3 se mantiene hasta que se normalizan las condiciones **y** se presiona el rearme (botón GPIO23 o desde la web).
+- **Histéresis:** para bajar de nivel, el IR tiene que quedar 3 puntos por debajo del umbral.
+- **Enclavamiento:** el nivel 3 se mantiene hasta que se presiona el rearme (botón GPIO23 o desde la web); el rearme se rechaza mientras siga la condición de alarma.
 - **Precalentamiento:** los primeros 60 s el nivel queda en 0, salvo llama.
 
 La misma lógica está en el firmware y en `server/logica.js` (que usa el simulador); `npm test` la verifica.

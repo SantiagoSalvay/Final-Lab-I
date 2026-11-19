@@ -516,7 +516,7 @@
         <div>
           <h3>Índice de riesgo</h3>
           <p class="formula">IR = 0,70 · pGas + 0,30 · pTemp</p>
-          <p class="muted">pGas = (gas mV − 525) / (2500 − 525) × 100<br />pTemp = (T − 20) / (60 − 20) × 100<br />Ambos limitados entre 0 y 100. Para bajar de nivel el IR tiene que caer 5 puntos por debajo del umbral (histéresis).</p>
+          <p class="muted">pGas = (gas mV − 525) / (2500 − 525) × 100<br />pTemp = (T − 20) / (60 − 20) × 100<br />Ambos limitados entre 0 y 100. Para bajar de nivel el IR tiene que caer 3 puntos por debajo del umbral (histéresis).</p>
         </div>
         <table class="tabla tabla--niveles">
           <thead><tr><th>Nivel</th><th>Condición</th><th>Respuesta de la maqueta</th></tr></thead>
@@ -524,7 +524,7 @@
             <tr><td><span class="badge" data-n="0">0 · Normal</span></td><td>IR &lt; 30</td><td>LED verde</td></tr>
             <tr><td><span class="badge" data-n="1">1 · Precaución</span></td><td>IR ≥ 30</td><td>LED amarillo</td></tr>
             <tr><td><span class="badge" data-n="2">2 · Alerta</span></td><td>IR ≥ 52</td><td>LED rojo fijo, buzzer intermitente</td></tr>
-            <tr><td><span class="badge" data-n="3">3 · Alarma</span></td><td>IR ≥ 75, T &gt; 40 °C, pGas &gt; 85 % o llama</td><td>LED rojo parpadeando, buzzer continuo, vallas a 90° y bomba por ráfagas. Queda enclavado hasta el rearme.</td></tr>
+            <tr><td><span class="badge" data-n="3">3 · Alarma</span></td><td>IR ≥ 75, T &gt; 40 °C, pGas &gt; 85 % o llama</td><td>LED rojo parpadeando, buzzer continuo, vallas a 90° y bomba por ráfagas (3 s / 5 s, hasta 6). Queda enclavado hasta el rearme.</td></tr>
           </tbody>
         </table>
       </div>

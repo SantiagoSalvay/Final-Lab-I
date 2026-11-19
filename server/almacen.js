@@ -122,7 +122,7 @@ class Almacen {
     }
     if (p && l.rociador !== p.rociador) {
       ev.push(this.evento('rociador', l.rociador ? 'serious' : 'ok', l.rociador ? 'Rociador activado' : 'Rociador detenido',
-        l.rociador ? 'Bomba por ráfagas (2 s encendida / 4 s apagada)' : '', o));
+        l.rociador ? 'Bomba por ráfagas (3 s encendida / 5 s apagada, hasta 6 ráfagas)' : '', o));
     }
     if (p && p.enclavado && !l.enclavado && !nuevaSesion) ev.push(this.evento('rearme', 'ok', 'Sistema rearmado', 'Se liberó el enclavamiento de nivel 3', o));
     return ev;

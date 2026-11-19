@@ -27,7 +27,7 @@ class NodoVirtual {
     this.seq = 0;
     this.t0 = Date.now() - (conPrecalentamiento ? 0 : L.CFG.PRECALENTAMIENTO_S * 1000);
     this.v = { temp: e.temp, hum: e.hum, gasMv: e.gasMv, llamaMv: e.llamaMv };
-    this.estado = { nivel: 0, enclavado: false };
+    this.estado = { nivel: 0, nivelBase: 0, enclavado: false };
     this.rearmePendiente = false;
     this.bombaT0 = 0;
   }
@@ -71,7 +71,7 @@ class NodoVirtual {
     const obj = this.objetivo();
     const v = this.v;
     const ahora = Date.now();
-    const bombaOn = this.estado.nivel === 3 && ((ahora - this.bombaT0) % (L.CFG.BOMBA_ON_MS + L.CFG.BOMBA_OFF_MS)) < L.CFG.BOMBA_ON_MS;
+    const bombaOn = this.estado.enclavado && L.estadoBomba(ahora - this.bombaT0).bomba;
     const enfriar = bombaOn ? 0.6 : 0;
 
     v.temp = acercar(v.temp, obj.temp - enfriar * 2, 0.12) + ruido(0.08);
@@ -86,14 +86,14 @@ class NodoVirtual {
     const ir = L.indiceRiesgo(pg, pt);
     const llama = v.llamaMv < L.CFG.LLAMA_UMBRAL_MV;
 
-    const previo = this.estado.nivel;
+    const estabaEnclavado = this.estado.enclavado;
     const res = L.evaluarNivel(this.estado, { ir, temp, pg, llama, calentando, pedirRearme: this.rearmePendiente });
     this.rearmePendiente = false;
-    this.estado = { nivel: res.nivel, enclavado: res.enclavado };
-    if (res.nivel === 3 && previo !== 3) this.bombaT0 = ahora;
+    this.estado = { nivel: res.nivel, nivelBase: res.nivelBase, enclavado: res.enclavado };
+    if (res.enclavado && (!estabaEnclavado || res.rearmado)) this.bombaT0 = ahora;
 
-    const nivel3 = res.nivel === 3;
-    const bomba = nivel3 && ((ahora - this.bombaT0) % (L.CFG.BOMBA_ON_MS + L.CFG.BOMBA_OFF_MS)) < L.CFG.BOMBA_ON_MS;
+    const nivel3 = res.enclavado;
+    const { bomba, rociador } = nivel3 ? L.estadoBomba(ahora - this.bombaT0) : { bomba: false, rociador: false };
 
     this.seq += 1;
     this.onLectura({
@@ -108,7 +108,7 @@ class NodoVirtual {
       calentando,
       llama,
       vallas: nivel3,
-      rociador: nivel3,
+      rociador,
       bomba,
       llama_mv: Math.round(v.llamaMv),
       enclavado: res.enclavado,

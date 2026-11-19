@@ -2,77 +2,69 @@
 
 El código lleva un solo comentario corto por subrutina; las explicaciones van acá.
 
-## Qué se sumó respecto del firmware anterior
+## Qué se le sumó a la versión de Jefe
 
-| Pedido | Cómo quedó |
+La versión de Jefe ya tenía OLED, botón de rearme, bomba por ráfagas, histéresis, enclavamiento, WiFi con reconexión y la línea `DATA`. Para que funcione con el panel web se cambió solo esto:
+
+| Cambio | Por qué |
 |---|---|
-| OLED SSD1306 por I2C | `actualizarOled()`, I2C en SDA 21 / SCL 22, dirección 0x3C, refresco cada 500 ms |
-| Botón de rearme | `leerBoton()` con antirrebote de 50 ms, GPIO23 con `INPUT_PULLUP` (apretado = LOW) |
-| Bomba por ráfagas en nivel 3 | `actualizarBomba()`: relé 2 s encendido / 4 s apagado mientras dure el nivel 3 |
-| Histéresis y rearme de nivel | `nivelPorIR()` y `evaluarNivel()` |
-| Envío por WiFi en JSON con reconexión | `tareaRed()` + `enviarHttp()` en el núcleo 0 |
-| Línea `DATA` por USB | `enviarSerie()`, mismo formato que antes |
-| Correcciones | `GAS_OVERRIDE_P = 85` y `LLAMA_UMBRAL_MV = 1800` |
+| `SERVER_URL` apunta a `/api/lecturas` (antes `/api/datos`) | Es la ruta del servidor (igual el servidor acepta las dos) |
+| `ENVIO_MS` de 2000 a 1000 y solo se manda si hay dato nuevo (`ultimoSeqEnviado`) | El panel muestra una lectura por segundo, sin repetidas |
+| JSON con `bomba`, `llama_mv`, `enclavado`, `uptime_s` y `rssi`; `rociador` ahora indica que el ciclo de ráfagas está activo | La escena anima el agua con `bomba`, y el panel muestra el enclavamiento, el sensor de llama y la señal WiFi |
+| `DEVICE_TOKEN` (header `X-Device-Token`) | Opcional, para que solo el nodo pueda publicar si el servidor está en internet |
+| `setConnectTimeout(3000)` | Si el servidor no responde, el envío no queda colgado |
+| Rearme remoto (`rearmeRemoto`) | Si el panel pide rearmar, el servidor responde `"rearme":true`; la tarea de red levanta la bandera y el `loop` llama a `rearmar()`, con las mismas reglas que el botón |
+| Pila de la tarea de red de 8192 a 12288 | Margen para HTTPS si se usa Render |
 
-> Importante: este archivo se escribió a partir de la especificación, sin tener la copia de Jefe a la vista.
-> Antes de reemplazarla, compararla con su `nodo_transmisor.ino` (sobre todo pines, `PIN_R = 27` / `PIN_B = 25`
-> y el formato de la línea `DATA`).
+Todo lo demás (pines, umbrales, `HIST_IR = 3`, bomba 3 s / 5 s con 6 ráfagas, `GAS_OVERRIDE_P = 85`, `LLAMA_UMBRAL_MV = 1800`) quedó como lo tenía Jefe.
 
 ## Antes de cargarlo
 
 1. Librerías: *DHT sensor library* + *Adafruit Unified Sensor*, *ESP32Servo*, *Adafruit SSD1306* + *Adafruit GFX*.
-2. Editar las 4 constantes de red al principio:
-   - `WIFI_SSID` / `WIFI_PASS`: el hotspot del celular.
-   - `SERVER_URL`: `http://IP-DE-LA-PC:3000/api/lecturas` si el servidor corre en la notebook, o `https://<app>.onrender.com/api/lecturas` si está desplegado.
-   - `DEVICE_TOKEN`: igual al configurado en el servidor (vacío si no se usa).
-3. Placa *NodeMCU-32S*, puerto COM6, 115200 baudios.
+2. Placa *NodeMCU-32S* (core esp32 3.3.12), puerto COM6.
+3. `WIFI_SSID` / `WIFI_PASS`: el hotspot del celular (tiene que ser de 2,4 GHz).
+4. `SERVER_URL`: `http://IP-DE-LA-NOTEBOOK:3000/api/lecturas`, o `https://<app>.onrender.com/api/lecturas` si está en Render.
 
 ## Subrutinas
 
-**`leerMv(pin)`** — Hace 16 lecturas con `analogReadMilliVolts` (que ya usa la calibración de fábrica del ADC) y devuelve el promedio. El ADC está con atenuación de 11 dB para poder medir hasta ~3,1 V.
+**`clamp100(v)`** — Recorta un porcentaje al rango 0–100.
 
-**`limitar100(v)`** — Recorta un porcentaje al rango 0–100.
+**`leerMv(pin)`** — Promedia 16 lecturas de `analogReadMilliVolts` (ADC con atenuación de 11 dB, hasta ~3,1 V). Usa la calibración de fábrica del ADC del ESP32.
 
-**`medir()`** — Lee el DHT22 cada 2 s (el sensor no admite lecturas más rápidas; si falla se conserva el último valor válido), lee el MQ-2 y el sensor de llama, y calcula:
-- `pGas = (gasMv − 525) / (2500 − 525) × 100`
-- `pTemp = (T − 20) / (60 − 20) × 100`
-- `IR = 0,70 · pGas + 0,30 · pTemp`
-- hay llama si el KY-026 da menos de 1800 mV (≈3150 mV sin llama, ≈370 mV con llama cerca).
+**`actualizarDht()`** — El DHT22 no admite lecturas más rápidas que cada 2 s, así que se lee como máximo cada 2 s y, si falla, se conserva el último valor válido.
 
-**`nivelPorIR(ir, previo)`** — Elige el nivel por umbrales (30 / 52 / 75). Para **subir** alcanza con pasar el umbral; para **bajar** el IR tiene que quedar 5 puntos por debajo (histéresis). Así el nivel no "tiembla" cuando el IR ronda un umbral. Ejemplo: en nivel 2 (umbral 52) se baja recién con IR < 47.
+**`setLed(r, g, b)`** — Maneja el LED RGB. Contempla el ánodo común invirtiendo la lógica, y tiene en cuenta que el rojo y el azul están cruzados en el cableado (`PIN_R = 27`, `PIN_B = 25`).
 
-**`evaluarNivel()`** — Máquina de estados del nivel:
-1. Condición de alarma: IR ≥ 75, T > 40 °C, pGas > 85 % o llama. Durante el precalentamiento del MQ-2 (primeros 60 s) solo cuenta la llama.
-2. Si hay alarma → nivel 3 y queda **enclavado**.
-3. Si no está enclavado → nivel por IR con histéresis (máximo 2), o 0 durante el precalentamiento.
-4. Con el nivel 3 enclavado, el sistema sigue en alarma aunque las condiciones bajen, hasta que alguien presione el **botón de rearme** (o el rearme remoto desde la web). El rearme se acepta solo si ya no hay condición de alarma y el IR está por debajo de 70; si no, se rechaza y el OLED lo muestra.
-5. Al entrar a nivel 3 se guarda `tNivel3`, que marca el inicio del ciclo de la bomba.
+**`setRele(encendido)`** — Enciende o apaga la bomba respetando si el relé se activa en alto o en bajo, y guarda el estado en `releEncendido`.
 
-**`enviarSerie()`** — Imprime `DATA,seq,tempC,hum,gasMv,pGas,pTemp,ir,nivel,precalent,llamaMv,llama,vallas` (sin cambios, para `monitor_pc.py`).
+**`copiarDatos()`** — Los datos se comparten entre el `loop` (núcleo 1) y la tarea de red (núcleo 0). La copia se hace dentro de una sección crítica (`portENTER_CRITICAL`) para no leer un dato a medio escribir.
 
-**`prepararJson()`** — Arma el JSON y lo copia a un buffer compartido protegido con un *spinlock* (`portENTER_CRITICAL`), porque lo lee otra tarea en el otro núcleo. Si el DHT nunca respondió, `temp` y `hum` van como `null`.
+**`nivelDesdeIr(ir, previo)`** — Nivel 0 a 2 por los umbrales 30 y 52. Para bajar, el IR tiene que caer 3 puntos (`HIST_IR`) por debajo del umbral del nivel en el que está. Por ejemplo, en nivel 2 se baja recién con IR < 49. Así el nivel no oscila cuando el IR ronda un umbral.
 
-**`enviarHttp(cuerpo)`** — `HTTP POST` al servidor con `Content-Type: application/json` y el header `X-Device-Token`. Funciona con `http://` y con `https://` (en ese caso usa `WiFiClientSecure` sin validar certificado, suficiente para la demo). Reutiliza la conexión (keep-alive) para no negociar TLS en cada envío. Si la respuesta trae `"rearme":true`, avisa al loop para que haga el rearme remoto.
+**`actualizarAvisos()`** — Nivel 0: LED verde. Nivel 1: amarillo (rojo + verde). Nivel 2: rojo fijo con buzzer intermitente cada 500 ms. Nivel 3: rojo parpadeando cada 200 ms y buzzer continuo. Usa `millis()`, sin `delay`.
 
-**`tareaRed()`** — Tarea de FreeRTOS fijada al núcleo 0 (el mismo del WiFi). Conecta al WiFi, y si se cae reintenta cada 8 s; cuando hay una lectura nueva la manda. Como corre aparte, aunque el servidor tarde o el WiFi se corte, el `loop` (sensores, alarmas, vallas, bomba) **nunca se bloquea**. Si se acumulan lecturas mientras un envío tarda, se manda siempre la más reciente.
+**`actualizarVallas()`** — Lleva los dos servos hacia el ángulo objetivo (0° abiertas, 90° cerradas) de a 2° cada 20 ms. Tarda unos 0,9 s en cerrar y no bloquea.
 
-**`leerBoton()`** — Antirrebote por tiempo: el cambio de estado se acepta si se mantiene 50 ms. En el flanco de bajada (apretado) pide el rearme.
+**`actualizarBomba()`** — Con la alarma enclavada, prende el relé 3 s y lo apaga 5 s, hasta 6 ráfagas. Al enclavarse, `tBomba` se adelanta para que la primera ráfaga arranque enseguida. Sin alarma, el relé queda apagado.
 
-**`actualizarLed()`** — Nivel 0 verde, 1 amarillo (rojo + verde), 2 rojo fijo, 3 rojo parpadeando cada 250 ms.
+**`rearmar()`** — Libera el enclavamiento solo si ya no hay condición de alarma; si sigue, lo rechaza y lo avisa por el puerto serie. Al rearmar se reinician las ráfagas y se apaga la bomba; las vallas se abren solas en el siguiente ciclo.
 
-**`actualizarBuzzer()`** — Nivel 2: 200 ms encendido cada 1 s. Nivel 3: continuo.
+**`leerBoton()`** — Botón en GPIO23 con `INPUT_PULLUP` (apretado = LOW) y antirrebote de 40 ms. Al apretarlo llama a `rearmar()`.
 
-**`actualizarBomba()`** — En nivel 3 activa el relé 2 s y lo apaga 4 s, en ciclo, usando `millis()` (sin `delay`). Fuera del nivel 3 el relé queda apagado.
+**`mostrarOled()`** — Cada 500 ms muestra el nombre del nivel en grande, temperatura, humedad, gas, IR, llama, vallas, bomba, precalentamiento y el estado del WiFi con el último código HTTP (200 = el servidor recibió el dato).
 
-**`moverVallas()`** — Lleva los dos servos hacia 90° (cerradas, en nivel 3) o 0° (abiertas) de a 2° cada 20 ms, sin bloquear. Tarda ~0,9 s en cerrar.
+**`evaluar()`** — Se ejecuta una vez por segundo:
+1. Lee los sensores y calcula `pGas = (gasMv − 525) / (2500 − 525) × 100`, `pTemp = (T − 20) / (60 − 20) × 100` e `IR = 0,70 · pGas + 0,30 · pTemp`.
+2. Condición de alarma: llama (KY-026 < 1800 mV) en cualquier momento; además, pasado el precalentamiento de 60 s del MQ-2, IR ≥ 75, T > 40 °C o pGas > 85 %.
+3. Si aparece la condición, se enclava la alarma (nivel 3) y arranca la bomba.
+4. El nivel mostrado es 3 si está enclavada, o el de `nivelDesdeIr` si no (0 durante el precalentamiento).
+5. Guarda los datos para la tarea de red y manda por USB `DATA,seq,tempC,hum,gasMv,pGas,pTemp,ir,nivel,precalent,llamaMv,llama,vallas` para `monitor_pc.py`.
 
-**`actualizarOled()`** — Cada 500 ms: estado del WiFi y del último envío, nivel en grande (en nivel 3 el recuadro parpadea invertido), IR, temperatura, humedad, gas, y una línea de estado (precalentamiento con cuenta regresiva, llama, vallas cerradas, avisos de rearme o número de secuencia y señal WiFi).
+Con `MODO_CALIBRACION = true` solo imprime los mV del MQ-2 y del sensor de llama, para calibrar.
 
-**`setup()`** — Configura pines, ADC, DHT, OLED (si no responde se sigue sin él), servos en 0° y lanza la tarea de red.
+**`numero(v, decimales)`** / **`jbool(v)`** — Pasan números y booleanos a texto JSON. Si el DHT nunca respondió, la temperatura y la humedad van como `null`.
 
-**`loop()`** — Atiende el botón y el rearme remoto, mide y evalúa una vez por segundo (usando `tMedicion += 1000` para que el período no se corra) y actualiza las salidas en cada vuelta.
-
-## JSON que manda el nodo
+**`armarJson(d)`** — Arma el JSON que recibe el servidor:
 
 ```json
 {
@@ -82,4 +74,10 @@ El código lleva un solo comentario corto por subrutina; las explicaciones van a
 }
 ```
 
-Respecto del formato propuesto se agregaron `bomba` (estado del relé en ese segundo), `llama_mv`, `enclavado`, `uptime_s` y `rssi`. `rociador` vale `true` mientras dura el nivel 3 (ciclo de ráfagas activo).
+**`enviarJson(json)`** — Hace un `HTTP POST` con `Content-Type: application/json`. Con una URL `https://` usa `WiFiClientSecure` sin validar el certificado (suficiente para la demo). Si la respuesta trae `"rearme":true`, levanta `rearmeRemoto`.
+
+**`tareaRed()`** — Tarea de FreeRTOS en el núcleo 0. Si el WiFi se cae, reintenta cada 10 s; si está conectado, manda el último dato nuevo cada segundo. Como corre aparte, aunque la red falle o el servidor tarde, el `loop` (alarmas, vallas, bomba) sigue funcionando.
+
+**`setup()`** — Inicializa el puerto serie, los sensores, las salidas, los servos (en 0°), el OLED y el WiFi, y lanza la tarea de red.
+
+**`loop()`** — En cada vuelta atiende el botón, el rearme remoto, la bomba, los avisos, las vallas y el OLED; una vez por segundo llama a `evaluar()`.
