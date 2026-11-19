@@ -1,0 +1,20 @@
+# Despliegue en Render (https://render.com): "New +" → "Blueprint" → elegir este repositorio.
+services:
+  - type: web
+    name: sati-incendios
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATA_DIR
+        value: /tmp/sati
+      # Token que el ESP32 manda en el header X-Device-Token (copiarlo en DEVICE_TOKEN del firmware).
+      - key: DEVICE_TOKEN
+        sync: false
+      # Clave para los botones del operador (simulador, rearme, limpiar). Vacía = sin clave.
+      - key: ADMIN_KEY
+        sync: false
