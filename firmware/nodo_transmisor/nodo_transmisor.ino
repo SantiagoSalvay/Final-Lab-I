@@ -8,9 +8,9 @@
 #include <ESP32Servo.h>
 
 // ===================== Red =====================
-const char* WIFI_SSID    = "HotspotCelular";
-const char* WIFI_PASS    = "clave1234";
-const char* SERVER_URL   = "http://192.168.43.100:3000/api/lecturas";
+const char* WIFI_SSID    = "Test_Lab-I";
+const char* WIFI_PASS    = "proyectolab1";
+const char* SERVER_URL   = "http://10.29.205.192:3000/api/lecturas";
 const char* DEVICE_TOKEN = "";
 
 // ===================== Pines =====================
