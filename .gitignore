@@ -3,4 +3,5 @@ data/
 __pycache__/
 *.pyc
 .env
+firmware/**/secretos.h
 .DS_Store

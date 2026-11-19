@@ -33,12 +33,16 @@ Hay dos páginas:
 | <http://localhost:3000> | Visitantes del parque | Estado del sendero en lenguaje simple, vista animada, condiciones del ambiente, avisos, recomendaciones y teléfonos de emergencia. **No tiene datos técnicos ni controles.** |
 | <http://localhost:3000/operador> | Encargado del sendero | Panel técnico completo (IR, mV, gráficos, historial, CSV), **rearme de la alarma** y simulador. Pide clave. |
 
-**Clave del encargado:** se define con la variable `ADMIN_KEY`. Si no se define, el servidor inventa una al arrancar y la muestra en la consola (cambia cada vez que se reinicia). Después de 8 intentos fallidos, esa IP queda bloqueada 10 minutos.
+### Claves (archivos que NO se suben a GitHub)
 
-```bash
-# PowerShell: fijar la clave para esta terminal y arrancar
-$env:ADMIN_KEY = "una-clave-larga"; npm start
-```
+| Archivo | Qué tiene | Cómo crearlo |
+|---|---|---|
+| `.env` | `ADMIN_KEY` (clave del encargado) y `DEVICE_TOKEN` (token del nodo) | Copiar `.env.ejemplo` como `.env` y completar |
+| `firmware/nodo_transmisor/secretos.h` | Red WiFi, clave, `SERVER_URL` y `DEVICE_TOKEN` del ESP32 | Copiar `secretos.ejemplo.h` como `secretos.h` y completar |
+
+Los dos están en `.gitignore`. El `DEVICE_TOKEN` tiene que ser **igual** en los dos archivos. Si se clona el repo en otra PC (por ejemplo, la que programa el ESP32), hay que crear estos archivos a mano y pasar las claves por un medio privado.
+
+Sin `ADMIN_KEY`, el servidor inventa una clave al arrancar y la muestra en la consola (cambia en cada reinicio). Después de 8 intentos fallidos, esa IP queda bloqueada 10 minutos.
 
 Sin hardware: entrar a `/operador` → **Centro de pruebas** → **Iniciar** o un escenario (Normal, Precaución, Alerta, Incendio). Mientras el simulador está activo, la página pública muestra el aviso "Modo demostración".
 
@@ -48,7 +52,7 @@ Sin hardware: entrar a `/operador` → **Centro de pruebas** → **Iniciar** o u
 
 1. Conectar la notebook y el ESP32 al **hotspot del celular**.
 2. Averiguar la IP de la notebook (`ipconfig` → "Dirección IPv4", por ejemplo `192.168.43.100`).
-3. En el firmware: `SERVER_URL = "http://192.168.43.100:3000/api/lecturas"`.
+3. En `secretos.h`: `SERVER_URL = "http://192.168.43.100:3000/api/lecturas"`.
 4. `npm start`. La primera vez Windows pregunta por el firewall: **permitir Node.js en redes privadas** (si el hotspot quedó como red pública, permitir también ahí).
 5. El panel se ve en `http://localhost:3000` desde la notebook, o en `http://192.168.43.100:3000` desde cualquier celular conectado al hotspot.
 
@@ -56,8 +60,8 @@ Sin hardware: entrar a `/operador` → **Centro de pruebas** → **Iniciar** o u
 
 1. Subir el repositorio a GitHub.
 2. En [render.com](https://render.com): **New + → Blueprint** → elegir el repo (usa `render.yaml`).
-3. Cargar `DEVICE_TOKEN` y `ADMIN_KEY` (la clave del encargado) en las variables de entorno.
-4. En el firmware: `SERVER_URL = "https://<nombre>.onrender.com/api/lecturas"` y el mismo `DEVICE_TOKEN`.
+3. Cargar `DEVICE_TOKEN` y `ADMIN_KEY` en las variables de entorno de Render, con los mismos valores del `.env` (el `.env` no se sube, Render no lo ve).
+4. En `secretos.h`: `SERVER_URL = "https://<nombre>.onrender.com/api/lecturas"` y el mismo `DEVICE_TOKEN`.
 
 El plan gratuito de Render "duerme" el servicio tras 15 min sin uso: abrir la página unos minutos antes de presentar. El historial se pierde al reiniciarse (no tiene disco persistente). Cualquier otro hosting con Node.js (Railway, Fly.io, una VM) sirve igual: `npm start` y la variable `PORT`.
 

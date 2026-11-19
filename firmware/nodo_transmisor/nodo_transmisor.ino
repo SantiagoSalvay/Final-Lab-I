@@ -15,10 +15,7 @@
 Adafruit_SSD1306 oled(128, 64, &Wire, -1);
 #endif
 
-const char* WIFI_SSID    = "Test_Lab-I";
-const char* WIFI_PASS    = "proyectolab1";
-const char* SERVER_URL   = "http://10.29.205.192:3000/api/lecturas";
-const char* DEVICE_TOKEN = "";  // igual al DEVICE_TOKEN del servidor; vacío si no se usa
+#include "secretos.h"  // red WiFi, servidor y token (no se sube a GitHub; ver secretos.ejemplo.h)
 const unsigned long ENVIO_MS = 1000;
 
 const int PIN_DHT    = 4;

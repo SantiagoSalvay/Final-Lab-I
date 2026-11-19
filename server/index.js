@@ -1,6 +1,7 @@
 'use strict';
 // Servidor SATI: recibe lecturas del ESP32 por HTTP POST y las retransmite en vivo al panel web (SSE).
 
+require('./env');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');

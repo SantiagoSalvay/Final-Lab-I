@@ -11,7 +11,8 @@ La versión de Jefe ya tenía OLED, botón de rearme, bomba por ráfagas, histé
 | `SERVER_URL` apunta a `/api/lecturas` (antes `/api/datos`) | Es la ruta del servidor (igual el servidor acepta las dos) |
 | `ENVIO_MS` de 2000 a 1000 y solo se manda si hay dato nuevo (`ultimoSeqEnviado`) | El panel muestra una lectura por segundo, sin repetidas |
 | JSON con `bomba`, `llama_mv`, `enclavado`, `uptime_s` y `rssi`; `rociador` ahora indica que el ciclo de ráfagas está activo | La escena anima el agua con `bomba`, y el panel muestra el enclavamiento, el sensor de llama y la señal WiFi |
-| `DEVICE_TOKEN` (header `X-Device-Token`) | Opcional, para que solo el nodo pueda publicar si el servidor está en internet |
+| `DEVICE_TOKEN` (header `X-Device-Token`) | Para que solo el nodo pueda publicar si el servidor está en internet |
+| Red, URL y token en `secretos.h` (`#include "secretos.h"`) | Las claves no se suben a GitHub; el repo trae `secretos.ejemplo.h` como plantilla |
 | `setConnectTimeout(3000)` | Si el servidor no responde, el envío no queda colgado |
 | Rearme remoto (`rearmeRemoto`) | Si el panel pide rearmar, el servidor responde `"rearme":true`; la tarea de red levanta la bandera y el `loop` llama a `rearmar()`, con las mismas reglas que el botón |
 | Pila de la tarea de red de 8192 a 12288 | Margen para HTTPS si se usa Render |
@@ -22,8 +23,8 @@ Todo lo demás (pines, umbrales, `HIST_IR = 3`, bomba 3 s / 5 s con 6 ráfagas, 
 
 1. Librerías: *DHT sensor library* + *Adafruit Unified Sensor*, *ESP32Servo*, *Adafruit SSD1306* + *Adafruit GFX*.
 2. Placa *NodeMCU-32S* (core esp32 3.3.12), puerto COM6.
-3. `WIFI_SSID` / `WIFI_PASS`: el hotspot del celular (tiene que ser de 2,4 GHz).
-4. `SERVER_URL`: `http://IP-DE-LA-NOTEBOOK:3000/api/lecturas`, o `https://<app>.onrender.com/api/lecturas` si está en Render.
+3. Copiar `secretos.ejemplo.h` como `secretos.h` (no se sube a GitHub) y completar `WIFI_SSID` / `WIFI_PASS` con el hotspot del celular (tiene que ser de 2,4 GHz).
+4. En el mismo `secretos.h`, `SERVER_URL`: `http://IP-DE-LA-NOTEBOOK:3000/api/lecturas`, o `https://<app>.onrender.com/api/lecturas` si está en Render.
 
 ## Subrutinas
 

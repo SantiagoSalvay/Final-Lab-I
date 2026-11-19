@@ -4,6 +4,7 @@
 // Uso: node herramientas/simular_nodo.js [URL] [--token XXX] [--escenario normal|precaucion|alerta|incendio]
 // Teclas: n = normal, p = precaución, a = alerta, i = incendio, r = rearme, q = salir.
 
+require('../server/env');
 const { NodoVirtual } = require('../server/simulador');
 
 const args = process.argv.slice(2);

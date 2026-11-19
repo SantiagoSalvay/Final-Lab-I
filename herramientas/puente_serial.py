@@ -10,11 +10,28 @@ Uso:
 """
 
 import json
+import os
 import sys
 import time
 import urllib.request
+from pathlib import Path
 
 import serial  # pyserial
+
+
+def leer_token():
+    """Toma DEVICE_TOKEN de la variable de entorno o del archivo .env del proyecto."""
+    if os.environ.get("DEVICE_TOKEN"):
+        return os.environ["DEVICE_TOKEN"]
+    env = Path(__file__).resolve().parent.parent / ".env"
+    if env.exists():
+        for linea in env.read_text(encoding="utf-8").splitlines():
+            if linea.strip().startswith("DEVICE_TOKEN="):
+                return linea.split("=", 1)[1].strip().strip('"').strip("'")
+    return ""
+
+
+TOKEN = leer_token()
 
 CAMPOS = ["seq", "tempC", "hum", "gasMv", "pGas", "pTemp", "ir", "nivel",
           "precalent", "llamaMv", "llama", "vallas"]
@@ -56,10 +73,13 @@ def linea_a_json(linea):
 
 def enviar(url, datos):
     """Hace el POST JSON y devuelve la respuesta del servidor."""
+    headers = {"Content-Type": "application/json"}
+    if TOKEN:
+        headers["X-Device-Token"] = TOKEN
     req = urllib.request.Request(
         url + ("&" if "?" in url else "?") + "origen=puente",
         data=json.dumps(datos).encode(),
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=4) as r:
