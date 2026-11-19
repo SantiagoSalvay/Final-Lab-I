@@ -4,13 +4,16 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { Almacen } = require('./almacen');
 const { NodoVirtual } = require('./simulador');
 const { CFG, NIVELES } = require('./logica');
 
 const PORT = Number(process.env.PORT) || 3000;
 const DEVICE_TOKEN = process.env.DEVICE_TOKEN || '';
-const ADMIN_KEY = process.env.ADMIN_KEY || '';
+// Clave del encargado: siempre obligatoria. Si no se configura, se genera una al arrancar y se muestra en la consola.
+const ADMIN_KEY_FIJA = !!process.env.ADMIN_KEY;
+const ADMIN_KEY = process.env.ADMIN_KEY || crypto.randomBytes(4).toString('hex');
 const TIMEOUT_NODO_MS = Number(process.env.TIMEOUT_NODO_MS) || 6000;
 const DATA_DIR = process.env.DATA_DIR === 'off' ? null : process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -92,12 +95,45 @@ function leerCuerpo(req, max = 16 * 1024) {
   });
 }
 
-const esAdmin = (req) => !ADMIN_KEY || req.headers['x-admin-key'] === ADMIN_KEY;
-const esNodo = (req, url) => !DEVICE_TOKEN || req.headers['x-device-token'] === DEVICE_TOKEN || url.searchParams.get('token') === DEVICE_TOKEN;
+function igualSeguro(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a || '')).digest();
+  const hb = crypto.createHash('sha256').update(String(b || '')).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
+// Límite de intentos fallidos de clave por IP (evita que se adivine probando).
+const fallos = new Map();
+const MAX_FALLOS = 8;
+const VENTANA_FALLOS_MS = 10 * 60 * 1000;
+const ipDe = (req) => String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+function bloqueado(req) {
+  const f = fallos.get(ipDe(req));
+  return f && f.n >= MAX_FALLOS && Date.now() - f.t < VENTANA_FALLOS_MS;
+}
+function registrarFallo(req) {
+  const ip = ipDe(req);
+  const f = fallos.get(ip);
+  if (!f || Date.now() - f.t > VENTANA_FALLOS_MS) fallos.set(ip, { n: 1, t: Date.now() });
+  else f.n += 1;
+}
+
+const esAdmin = (req) => igualSeguro(req.headers['x-admin-key'], ADMIN_KEY);
+const esNodo = (req, url) => !DEVICE_TOKEN || igualSeguro(req.headers['x-device-token'] || url.searchParams.get('token'), DEVICE_TOKEN);
+
+// Verifica la clave del encargado; responde 401/429 y devuelve false si no es válida.
+function exigirEncargado(req, res) {
+  if (bloqueado(req)) { json(res, 429, { ok: false, error: 'demasiados intentos, esperá unos minutos' }); return false; }
+  if (esAdmin(req)) { fallos.delete(ipDe(req)); return true; }
+  registrarFallo(req);
+  json(res, 401, { ok: false, error: 'clave de encargado inválida' });
+  return false;
+}
 
 function servirEstatico(req, res, url) {
   let rel = decodeURIComponent(url.pathname);
   if (rel === '/') rel = '/index.html';
+  if (rel === '/operador/') { res.writeHead(301, { Location: '/operador' }); return res.end(); }
+  if (rel === '/operador') rel = '/operador.html';
   const ruta = path.normalize(path.join(PUBLIC_DIR, rel));
   if (!ruta.startsWith(PUBLIC_DIR)) return json(res, 403, { error: 'prohibido' });
   fs.stat(ruta, (err, st) => {
@@ -163,7 +199,7 @@ async function manejar(req, res) {
         historial: almacen.historial(HIST_INICIAL),
         eventos: almacen.eventos.slice(-60),
         estado: estadoSistema(),
-        config: { ...CFG, NIVELES, admin_requerido: !!ADMIN_KEY },
+        config: { ...CFG, NIVELES },
       });
       clientes.add(res);
       req.on('close', () => clientes.delete(res));
@@ -173,7 +209,14 @@ async function manejar(req, res) {
     if (p === '/api/estado') return json(res, 200, { ultimo: almacen.ultimo, estado: estadoSistema() });
     if (p === '/api/historial') return json(res, 200, almacen.historial(Number(url.searchParams.get('limite')) || 0));
     if (p === '/api/eventos') return json(res, 200, almacen.eventos);
-    if (p === '/api/config') return json(res, 200, { ...CFG, NIVELES, admin_requerido: !!ADMIN_KEY });
+    if (p === '/api/config') return json(res, 200, { ...CFG, NIVELES });
+    if (p === '/healthz') return json(res, 200, { ok: true, uptime_s: Math.round(process.uptime()) });
+
+    // ---- Solo el encargado (clave en el header X-Admin-Key) ----
+    if (p.startsWith('/api/') && !exigirEncargado(req, res)) return;
+
+    if (p === '/api/operador/verificar') return json(res, 200, { ok: true });
+
     if (p === '/api/export.csv') {
       res.writeHead(200, {
         'Content-Type': 'text/csv; charset=utf-8',
@@ -181,17 +224,13 @@ async function manejar(req, res) {
       });
       return res.end(almacen.csv());
     }
-    if (p === '/healthz') return json(res, 200, { ok: true, uptime_s: Math.round(process.uptime()) });
-
-    // ---- Controles del operador ----
-    if (p.startsWith('/api/') && req.method === 'POST' && !esAdmin(req)) return json(res, 401, { ok: false, error: 'clave de operador inválida' });
 
     if (p === '/api/simulador' && req.method === 'POST') {
       const b = await leerCuerpo(req);
       if (b.accion === 'detener') {
         if (sim.activo) {
           sim.detener();
-          publicarEvento('fuente', 'info', 'Simulador detenido', 'Detenido por el operador', 'operador');
+          publicarEvento('fuente', 'info', 'Simulador detenido', 'Detenido por el encargado', 'encargado');
         }
       } else {
         const estabaActivo = sim.activo;
@@ -200,11 +239,11 @@ async function manejar(req, res) {
           sim.iniciar({ precalentamiento: b.accion === 'reiniciar' });
           if (!estabaActivo || b.accion === 'reiniciar') {
             publicarEvento('fuente', 'info', b.accion === 'reiniciar' ? 'Simulador reiniciado' : 'Simulador iniciado',
-              b.accion === 'reiniciar' ? 'Arranque con 60 s de precalentamiento del MQ-2' : 'Modo demostración sin hardware', 'operador');
+              b.accion === 'reiniciar' ? 'Arranque con 60 s de precalentamiento del MQ-2' : 'Modo demostración sin hardware', 'encargado');
           }
         }
         if (b.escenario && b.escenario !== 'manual') {
-          publicarEvento('escenario', 'info', `Escenario: ${b.escenario}`, sim.info().descripcion, 'operador');
+          publicarEvento('escenario', 'info', `Escenario: ${b.escenario}`, sim.info().descripcion, 'encargado');
         }
       }
       difundir('estado', estadoSistema());
@@ -214,7 +253,7 @@ async function manejar(req, res) {
     if (p === '/api/rearme' && req.method === 'POST') {
       if (sim.activo) sim.rearmar();
       else rearmeRemoto = Date.now();
-      publicarEvento('rearme', 'info', 'Rearme solicitado', sim.activo ? 'Enviado al nodo simulado' : 'Se enviará al nodo en su próxima transmisión', 'operador');
+      publicarEvento('rearme', 'info', 'Rearme solicitado', sim.activo ? 'Enviado al nodo simulado' : 'Se enviará al nodo en su próxima transmisión', 'encargado');
       difundir('estado', estadoSistema());
       return json(res, 200, { ok: true });
     }
@@ -264,8 +303,10 @@ if (process.env.SIMULADOR === '1') sim.iniciar();
 
 server.listen(PORT, () => {
   console.log(`\n  SATI · Sistema de Alerta Temprana de Incendios`);
-  console.log(`  Panel:    http://localhost:${PORT}`);
+  console.log(`  Página pública:     http://localhost:${PORT}`);
+  console.log(`  Panel del encargado: http://localhost:${PORT}/operador`);
   console.log(`  Ingesta:  POST http://<ip-de-esta-pc>:${PORT}/api/lecturas`);
   console.log(`  Token de nodo: ${DEVICE_TOKEN ? 'requerido' : 'no configurado (acepta cualquiera)'}`);
-  console.log(`  Clave de operador: ${ADMIN_KEY ? 'requerida' : 'no configurada'}\n`);
+  if (ADMIN_KEY_FIJA) console.log('  Clave del encargado: la definida en la variable ADMIN_KEY\n');
+  else console.log(`  Clave del encargado (temporal, cambia en cada arranque): ${ADMIN_KEY}\n  Para fijarla, definí la variable de entorno ADMIN_KEY.\n`);
 });

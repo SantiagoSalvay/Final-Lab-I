@@ -12,7 +12,7 @@ ESP32 (DHT22 · MQ-2 · KY-026)  ──WiFi / HTTP POST JSON──▶  Servidor 
 | Carpeta | Contenido |
 |---|---|
 | `server/` | Servidor Node.js **sin dependencias**: recibe lecturas, guarda historial, detecta eventos y transmite en vivo |
-| `public/` | Panel web: escena animada del sendero, gauge del IR, indicadores, gráficos, alertas, historial y simulador |
+| `public/` | **Página pública** (`/`, para visitantes, en lenguaje simple) y **panel del encargado** (`/operador`, técnico y con clave) |
 | `firmware/nodo_transmisor/` | Firmware completo del nodo (OLED, rearme, bomba por ráfagas, histéresis, WiFi + JSON) |
 | `herramientas/` | `simular_nodo.js` (hace de ESP32 desde la PC) y `puente_serial.py` (USB → web) |
 | `docs/firmware.md` | Explicación de cada subrutina del firmware, para el informe |
@@ -26,11 +26,21 @@ Requiere [Node.js](https://nodejs.org) 18 o superior.
 npm start
 ```
 
-Abrir <http://localhost:3000>. Sin hardware, ir al **Centro de pruebas** al final de la página y tocar **Iniciar** o algún escenario (Normal, Precaución, Alerta, Incendio). También se puede arrancar directamente con el simulador encendido:
+Hay dos páginas:
+
+| Página | Para quién | Qué tiene |
+|---|---|---|
+| <http://localhost:3000> | Visitantes del parque | Estado del sendero en lenguaje simple, vista animada, condiciones del ambiente, avisos, recomendaciones y teléfonos de emergencia. **No tiene datos técnicos ni controles.** |
+| <http://localhost:3000/operador> | Encargado del sendero | Panel técnico completo (IR, mV, gráficos, historial, CSV), **rearme de la alarma** y simulador. Pide clave. |
+
+**Clave del encargado:** se define con la variable `ADMIN_KEY`. Si no se define, el servidor inventa una al arrancar y la muestra en la consola (cambia cada vez que se reinicia). Después de 8 intentos fallidos, esa IP queda bloqueada 10 minutos.
 
 ```bash
-npm run demo
+# PowerShell: fijar la clave para esta terminal y arrancar
+$env:ADMIN_KEY = "una-clave-larga"; npm start
 ```
+
+Sin hardware: entrar a `/operador` → **Centro de pruebas** → **Iniciar** o un escenario (Normal, Precaución, Alerta, Incendio). Mientras el simulador está activo, la página pública muestra el aviso "Modo demostración".
 
 ## Conectar el ESP32
 
@@ -46,7 +56,7 @@ npm run demo
 
 1. Subir el repositorio a GitHub.
 2. En [render.com](https://render.com): **New + → Blueprint** → elegir el repo (usa `render.yaml`).
-3. Cargar `DEVICE_TOKEN` (y opcionalmente `ADMIN_KEY`) en las variables de entorno.
+3. Cargar `DEVICE_TOKEN` y `ADMIN_KEY` (la clave del encargado) en las variables de entorno.
 4. En el firmware: `SERVER_URL = "https://<nombre>.onrender.com/api/lecturas"` y el mismo `DEVICE_TOKEN`.
 
 El plan gratuito de Render "duerme" el servicio tras 15 min sin uso: abrir la página unos minutos antes de presentar. El historial se pierde al reiniciarse (no tiene disco persistente). Cualquier otro hosting con Node.js (Railway, Fly.io, una VM) sirve igual: `npm start` y la variable `PORT`.
@@ -68,7 +78,7 @@ El puente ocupa el puerto COM6, así que no puede usarse al mismo tiempo que `mo
 |---|---|---|
 | `PORT` | `3000` | Puerto HTTP |
 | `DEVICE_TOKEN` | vacío | Si se define, el nodo tiene que mandarlo en el header `X-Device-Token` |
-| `ADMIN_KEY` | vacío | Si se define, los botones del operador (simulador, rearme, limpiar) piden esta clave |
+| `ADMIN_KEY` | aleatoria (se muestra en consola) | Clave del encargado para `/operador`: rearme, simulador, exportar y limpiar |
 | `TIMEOUT_NODO_MS` | `6000` | Tiempo sin datos para mostrar "Sin señal" |
 | `MAX_HISTORIAL` | `3600` | Lecturas guardadas (1 h a 1 lectura/s) |
 | `DATA_DIR` | `./data` | Dónde se guarda el historial (`off` para no guardar) |
@@ -83,9 +93,12 @@ El puente ocupa el puerto COM6, así que no puede usarse al mismo tiempo que `mo
 | `GET` | `/api/estado` | Última lectura y estado de conexión |
 | `GET` | `/api/historial?limite=N` | Últimas N lecturas |
 | `GET` | `/api/eventos` | Registro de alertas |
-| `GET` | `/api/export.csv` | Historial completo en CSV |
-| `POST` | `/api/simulador` | `{"accion":"iniciar"\|"detener"\|"reiniciar","escenario":"normal"\|"precaucion"\|"alerta"\|"incendio"\|"manual","manual":{...}}` |
-| `POST` | `/api/rearme` | Rearme remoto (al simulador o al nodo real en su próximo envío) |
+| `GET` | `/api/export.csv` | Historial completo en CSV 🔒 |
+| `POST` | `/api/simulador` | `{"accion":"iniciar"\|"detener"\|"reiniciar","escenario":"normal"\|"precaucion"\|"alerta"\|"incendio"\|"manual","manual":{...}}` 🔒 |
+| `POST` | `/api/rearme` | Rearme remoto (al simulador o al nodo real en su próximo envío) 🔒 |
+| `POST` | `/api/historial/limpiar` | Borra historial y avisos 🔒 |
+
+🔒 = requiere el header `X-Admin-Key` con la clave del encargado.
 
 Ejemplo para probar la ingesta a mano:
 

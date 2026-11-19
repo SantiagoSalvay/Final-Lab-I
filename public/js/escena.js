@@ -1,6 +1,9 @@
 // Escena animada del sendero: estado de la maqueta en SVG y partículas (humo, brasas, agua) en canvas.
 
+import { SVG_ESCENA } from './escena-svg.js';
+
 const VB_W = 1000;
+const TEXTO_PUBLICO = ['OK', 'PRECAUC', 'ALERTA', 'PELIGRO'];
 const MAX_PARTICULAS = 700;
 
 function spriteHumo() {
@@ -28,8 +31,11 @@ function tintar(sprite, color) {
 }
 
 export class Escena {
-  constructor(raiz) {
+  constructor(raiz, { publico = false } = {}) {
     this.raiz = raiz;
+    this.publico = publico;
+    if (!raiz.querySelector('.escena__svg')) raiz.insertAdjacentHTML('afterbegin', SVG_ESCENA);
+    if (publico) raiz.querySelector('.etiqueta-nodo').textContent = 'SENSOR';
     this.canvas = raiz.querySelector('.escena__fx');
     this.ctx = this.canvas.getContext('2d');
     this.oled = raiz.querySelector('.oled');
@@ -63,7 +69,8 @@ export class Escena {
     if (l.bomba || l.rociador) this.mojadoHasta = Date.now() + 25000;
     r.classList.toggle('mojado', Date.now() < this.mojadoHasta);
     r.dataset.sirena = l.nivel === 3 ? 'continua' : l.nivel === 2 ? 'intermitente' : '';
-    this.oled.textContent = l.calentando ? `MQ2 ${Math.max(0, 60 - (l.uptime_s ?? 0))}s` : `N${l.nivel} IR ${Math.round(l.ir)}`;
+    if (this.publico) this.oled.textContent = TEXTO_PUBLICO[l.nivel] || '';
+    else this.oled.textContent = l.calentando ? `MQ2 ${Math.max(0, 60 - (l.uptime_s ?? 0))}s` : `N${l.nivel} IR ${Math.round(l.ir)}`;
     this.estado = { humo: Math.min(1, (l.p_gas || 0) / 100), llama: !!l.llama, bomba: !!l.bomba, nivel: l.nivel };
     // Pulso de radio en cada paquete recibido
     r.classList.remove('tx');

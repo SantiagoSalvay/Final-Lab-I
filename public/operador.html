@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SATI · Panel del encargado</title>
+  <meta name="description" content="Panel técnico del encargado: monitoreo detallado, rearme y simulador del nodo ESP32." />
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#0d2344" />
+  <link rel="icon" id="favicon" href="img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/estilos.css" />
+  <script>
+    try { const t = localStorage.getItem('sati-tema'); if (t) document.documentElement.dataset.theme = t; } catch {}
+  </script>
+</head>
+<body>
+  <!-- ===== Acceso del encargado ===== -->
+  <div class="login" id="login" hidden>
+    <form class="login__caja" id="login-form">
+      <img src="img/logo.svg" alt="" width="56" height="56" />
+      <h1>Panel del encargado</h1>
+      <p class="muted">Acceso restringido al personal a cargo del sendero. Desde acá se rearma la alarma y se gestiona el sistema.</p>
+      <label>Clave de acceso<input type="password" id="login-clave" autocomplete="current-password" required /></label>
+      <p class="login__error" id="login-error" role="alert"></p>
+      <button class="btn btn--pri btn--bloque" type="submit">Ingresar</button>
+      <a class="login__volver" href="./">← Volver a la página pública</a>
+    </form>
+  </div>
+
+  <!-- ===== Cabecera institucional ===== -->
+  <div class="cabecera">
+  <header class="topbar">
+    <div class="topbar__marca">
+      <img src="img/logo.svg" alt="" class="topbar__logo" width="44" height="44" />
+      <div>
+        <p class="topbar__sigla">SATI <span>· Sistema de Alerta Temprana de Incendios</span></p>
+        <p class="topbar__sub">Panel del encargado · Nodo N-01 · Sendero del Parque</p>
+      </div>
+    </div>
+    <div class="topbar__estado">
+      <span class="pill" id="pill-conexion" data-estado="conectando"><i class="pill__dot"></i><span id="txt-conexion">Conectando…</span></span>
+      <span class="pill pill--fuente" id="pill-fuente" hidden></span>
+      <time class="reloj" id="reloj">--:--:--</time>
+      <button class="icon-btn" id="btn-sonido" title="Activar sonido de alarma" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" /><path class="onda-on" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" /><path class="onda-off" d="M17 9l5 6M22 9l-5 6" /></svg>
+      </button>
+      <button class="icon-btn" id="btn-tema" title="Cambiar tema claro / oscuro">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" /></svg>
+      </button>
+      <a class="icon-btn" href="./" title="Ver la página pública" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="trazo"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
+      </a>
+      <button class="icon-btn" id="btn-salir" title="Cerrar sesión">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="trazo"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11" /></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===== Banner de alarma (nivel 3) ===== -->
+  <div class="banner-alarma" id="banner-alarma" role="alert" hidden>
+    <div class="banner-alarma__icono" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M12 2 1 21h22L12 2zm0 6 1 7h-2l1-7zm0 9.2a1.3 1.3 0 1 1 0 2.6 1.3 1.3 0 0 1 0-2.6z" /></svg>
+    </div>
+    <div class="banner-alarma__texto">
+      <strong>NIVEL 3 · ALARMA DE INCENDIO</strong>
+      <span id="banner-detalle">Vallas cerradas y rociador activo. Evacuar el sendero.</span>
+    </div>
+    <button class="btn btn--blanco" data-accion="rearme">Rearmar sistema</button>
+  </div>
+  </div>
+
+  <main class="contenedor">
+    <!-- ===== Escena + estado ===== -->
+    <section class="grid-hero">
+      <article class="card card--escena">
+        <header class="card__head">
+          <div>
+            <h2>Vista del sendero</h2>
+            <p class="muted">Representación en vivo de la maqueta: sensores, vallas, sirena y rociador</p>
+          </div>
+          <div class="chips" id="chips-actuadores">
+            <span class="chip" data-chip="vallas"><i></i>Vallas <b>abiertas</b></span>
+            <span class="chip" data-chip="sirena"><i></i>Sirena <b>en silencio</b></span>
+            <span class="chip" data-chip="rociador"><i></i>Rociador <b>en espera</b></span>
+          </div>
+        </header>
+
+        <div class="escena" id="escena" data-nivel="0">
+          <canvas class="escena__fx" id="escena-fx" aria-hidden="true"></canvas>
+
+          <div class="escena__hud escena__hud--sup">
+            <span class="hud-tag" id="hud-calentando" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a1 1 0 0 1 1 1v9.3a4 4 0 1 1-2 0V3a1 1 0 0 1 1-1z" /></svg>
+              MQ-2 precalentando · <b id="hud-calentando-s">60</b> s
+            </span>
+          </div>
+          <div class="escena__hud escena__hud--inf">
+            <span class="hud-tag hud-tag--mono" id="hud-paquete">Esperando datos del nodo…</span>
+          </div>
+          <div class="escena__sinsenal" id="escena-sinsenal" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8.5a15 15 0 0 1 20 0M5.5 12a10 10 0 0 1 13 0M9 15.5a5 5 0 0 1 6 0M12 19h.01M3 3l18 18" /></svg>
+            <strong>Sin señal del nodo</strong>
+            <span>Verificá la alimentación del ESP32 y la conexión WiFi, o iniciá el simulador.</span>
+          </div>
+        </div>
+      </article>
+
+      <aside class="card card--estado">
+        <header class="card__head card__head--compacto">
+          <h2>Nivel de riesgo</h2>
+          <span class="muted" id="estado-actualizado">—</span>
+        </header>
+
+        <div class="nivel-hero" id="nivel-hero" data-nivel="0">
+          <div class="nivel-hero__badge"><span id="nivel-num">0</span></div>
+          <div>
+            <p class="nivel-hero__nombre" id="nivel-nombre">Normal</p>
+            <p class="nivel-hero__accion" id="nivel-accion">Sendero habilitado. Monitoreo continuo.</p>
+          </div>
+        </div>
+
+        <ol class="escalera" id="escalera" aria-label="Escala de niveles">
+          <li data-n="0"><span>0</span>Normal</li>
+          <li data-n="1"><span>1</span>Precaución</li>
+          <li data-n="2"><span>2</span>Alerta</li>
+          <li data-n="3"><span>3</span>Alarma</li>
+        </ol>
+
+        <div class="gauge" id="gauge">
+          <svg viewBox="0 0 240 132" aria-labelledby="gauge-titulo" role="img">
+            <title id="gauge-titulo">Índice de riesgo de 0 a 100</title>
+            <g id="gauge-bandas"></g>
+            <g id="gauge-ticks" class="gauge__ticks"></g>
+            <path id="gauge-valor" class="gauge__valor" />
+            <g class="gauge__aguja" id="gauge-aguja">
+              <path d="M120 120 L117 118 L120 38 L123 118Z" />
+              <circle cx="120" cy="120" r="8" />
+              <circle cx="120" cy="120" r="3" class="gauge__eje" />
+            </g>
+          </svg>
+          <div class="gauge__lectura">
+            <span class="gauge__num" id="gauge-num">0,0</span>
+            <span class="gauge__label">Índice de riesgo (IR)</span>
+          </div>
+        </div>
+
+        <div class="aporte">
+          <div class="aporte__fila"><span>Gas · 70 %</span><b id="aporte-gas">0,0</b></div>
+          <div class="aporte__barra"><i id="aporte-barra-gas"></i><i id="aporte-barra-temp"></i></div>
+          <div class="aporte__fila"><span>Temperatura · 30 %</span><b id="aporte-temp">0,0</b></div>
+        </div>
+
+        <div class="aviso aviso--calentando" id="aviso-calentando" hidden>
+          <div class="aviso__txt"><strong>Precalentando sensor MQ-2</strong><span>Durante los primeros 60 s el nivel queda en 0, salvo llama.</span></div>
+          <div class="progreso"><i id="progreso-calentando"></i></div>
+        </div>
+        <div class="aviso aviso--enclavado" id="aviso-enclavado" hidden>
+          <div class="aviso__txt"><strong>Nivel 3 enclavado</strong><span>La alarma se mantiene hasta que las condiciones se normalicen y se presione el botón de rearme.</span></div>
+          <button class="btn btn--peligro" data-accion="rearme">Rearmar</button>
+        </div>
+
+        <dl class="nodo-info">
+          <div><dt>Secuencia</dt><dd id="info-seq">—</dd></div>
+          <div><dt>Señal WiFi</dt><dd id="info-rssi">—</dd></div>
+          <div><dt>Encendido</dt><dd id="info-uptime">—</dd></div>
+          <div><dt>Origen</dt><dd id="info-origen">—</dd></div>
+        </dl>
+      </aside>
+    </section>
+
+    <!-- ===== Indicadores ===== -->
+    <section class="kpis" aria-label="Lecturas actuales">
+      <article class="kpi" data-kpi="temp">
+        <header><span class="kpi__icono"><svg viewBox="0 0 24 24"><path d="M10 4a2 2 0 1 1 4 0v9.5a4.5 4.5 0 1 1-4 0z" /><path d="M12 9v7" /></svg></span>Temperatura</header>
+        <p class="kpi__valor"><span data-v="temp">—</span><small>°C</small></p>
+        <p class="kpi__sub">pTemp <b data-v="p_temp">—</b> % · disparo directo &gt; 40 °C</p>
+        <div class="kpi__barra"><i data-barra="temp"></i><em style="left:50%" title="40 °C"></em></div>
+        <canvas class="kpi__spark" data-spark="temp" aria-hidden="true"></canvas>
+      </article>
+      <article class="kpi" data-kpi="hum">
+        <header><span class="kpi__icono"><svg viewBox="0 0 24 24"><path d="M12 3s6 6.6 6 11a6 6 0 0 1-12 0c0-4.4 6-11 6-11z" /></svg></span>Humedad relativa</header>
+        <p class="kpi__valor"><span data-v="hum">—</span><small>%</small></p>
+        <p class="kpi__sub">Sensor DHT22 · <b data-v="hum_txt">—</b></p>
+        <div class="kpi__barra"><i data-barra="hum"></i></div>
+        <canvas class="kpi__spark" data-spark="hum" aria-hidden="true"></canvas>
+      </article>
+      <article class="kpi" data-kpi="gas">
+        <header><span class="kpi__icono"><svg viewBox="0 0 24 24"><path d="M5 17a4 4 0 0 1 1-7.9A6 6 0 0 1 17.6 8 4.5 4.5 0 0 1 18 17z" /></svg></span>Gas / humo (MQ-2)</header>
+        <p class="kpi__valor"><span data-v="p_gas">—</span><small>%</small></p>
+        <p class="kpi__sub"><b data-v="gas_mv">—</b> mV · disparo directo &gt; 85 %</p>
+        <div class="kpi__barra"><i data-barra="gas"></i><em style="left:85%" title="85 %"></em></div>
+        <canvas class="kpi__spark" data-spark="gas" aria-hidden="true"></canvas>
+      </article>
+      <article class="kpi" data-kpi="llama">
+        <header><span class="kpi__icono"><svg viewBox="0 0 24 24"><path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-7 1 2 2 3 3 3 0-3 0-5 0-8z" /></svg></span>Sensor de llama (KY-026)</header>
+        <p class="kpi__valor kpi__valor--estado"><span data-v="llama_txt">—</span></p>
+        <p class="kpi__sub"><b data-v="llama_mv">—</b> mV · umbral &lt; 1800 mV</p>
+        <div class="kpi__barra"><i data-barra="llama"></i><em style="left:45.5%" title="1800 mV"></em></div>
+        <canvas class="kpi__spark" data-spark="llama" aria-hidden="true"></canvas>
+      </article>
+    </section>
+
+    <!-- ===== Gráficos ===== -->
+    <section class="card">
+      <header class="card__head">
+        <div>
+          <h2>Evolución en tiempo real</h2>
+          <p class="muted">Una lectura por segundo. Pasá el cursor sobre un gráfico para ver los valores.</p>
+        </div>
+        <div class="segmentado" role="tablist" aria-label="Ventana de tiempo" id="ventana">
+          <button role="tab" data-ventana="60000">1 min</button>
+          <button role="tab" data-ventana="300000" aria-selected="true">5 min</button>
+          <button role="tab" data-ventana="900000">15 min</button>
+        </div>
+      </header>
+      <div class="graficos">
+        <figure class="grafico grafico--ancho">
+          <figcaption><span class="grafico__titulo">Índice de riesgo (IR)</span><span class="leyenda-bandas"><i class="b0"></i>Normal <i class="b1"></i>Precaución <i class="b2"></i>Alerta <i class="b3"></i>Alarma</span></figcaption>
+          <div class="grafico__lienzo"><canvas id="g-ir"></canvas></div>
+        </figure>
+        <figure class="grafico">
+          <figcaption><span class="grafico__titulo">Temperatura (°C)</span></figcaption>
+          <div class="grafico__lienzo"><canvas id="g-temp"></canvas></div>
+        </figure>
+        <figure class="grafico">
+          <figcaption><span class="grafico__titulo">Humedad relativa (%)</span></figcaption>
+          <div class="grafico__lienzo"><canvas id="g-hum"></canvas></div>
+        </figure>
+        <figure class="grafico">
+          <figcaption><span class="grafico__titulo">Gas MQ-2 (% de escala)</span></figcaption>
+          <div class="grafico__lienzo"><canvas id="g-gas"></canvas></div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ===== Eventos + historial ===== -->
+    <section class="grid-inferior">
+      <article class="card">
+        <header class="card__head">
+          <div>
+            <h2>Registro de alertas</h2>
+            <p class="muted">Cambios de nivel, actuadores y conexión</p>
+          </div>
+          <div class="segmentado segmentado--chico" id="filtro-eventos">
+            <button data-filtro="todos" aria-selected="true">Todos</button>
+            <button data-filtro="alertas">Solo alertas</button>
+          </div>
+        </header>
+        <ol class="eventos" id="eventos" aria-live="polite"></ol>
+        <p class="vacio" id="eventos-vacio">Todavía no hay eventos registrados.</p>
+      </article>
+
+      <article class="card">
+        <header class="card__head">
+          <div>
+            <h2>Historial de lecturas</h2>
+            <p class="muted">Últimas 40 lecturas recibidas</p>
+          </div>
+          <button class="btn btn--sec" data-accion="exportar">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>Exportar CSV
+          </button>
+        </header>
+        <div class="tabla-wrap">
+          <table class="tabla">
+            <thead>
+              <tr><th>Hora</th><th>#</th><th>T °C</th><th>HR %</th><th>Gas mV</th><th>pGas</th><th>IR</th><th>Nivel</th><th>Llama</th><th>Vallas</th></tr>
+            </thead>
+            <tbody id="tabla-cuerpo"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <!-- ===== Simulador ===== -->
+    <section class="card card--sim" id="simulador">
+      <header class="card__head">
+        <div>
+          <h2>Centro de pruebas · Simulador del nodo</h2>
+          <p class="muted">Genera lecturas con la misma lógica del firmware para probar el panel sin hardware. Se detiene solo cuando llegan datos del ESP32 real.</p>
+        </div>
+        <span class="pill pill--sim" id="sim-estado" data-activo="false"><i class="pill__dot"></i><span>Inactivo</span></span>
+      </header>
+      <div class="sim">
+        <div class="sim__bloque">
+          <h3>Control</h3>
+          <div class="botonera">
+            <button class="btn btn--pri" data-sim="iniciar">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5v14l11-7z" /></svg>Iniciar
+            </button>
+            <button class="btn btn--sec" data-sim="detener">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10H7z" /></svg>Detener
+            </button>
+            <button class="btn btn--sec" data-sim="reiniciar" title="Simula el encendido del nodo con 60 s de precalentamiento">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5" /></svg>Arranque en frío
+            </button>
+          </div>
+          <h3>Escenarios</h3>
+          <div class="escenarios" id="escenarios">
+            <button data-escenario="normal" data-n="0"><b>Normal</b><span>Día templado, aire limpio</span></button>
+            <button data-escenario="precaucion" data-n="1"><b>Precaución</b><span>Humo leve, 29 °C</span></button>
+            <button data-escenario="alerta" data-n="2"><b>Alerta</b><span>Humo denso, ambiente seco</span></button>
+            <button data-escenario="incendio" data-n="3"><b>Incendio</b><span>Llama junto al nodo</span></button>
+          </div>
+        </div>
+        <div class="sim__bloque">
+          <h3>Valores manuales</h3>
+          <form id="form-manual" class="manual">
+            <label>Temperatura <output id="o-temp">25 °C</output><input type="range" name="temp" min="10" max="60" step="0.5" value="25" /></label>
+            <label>Humedad <output id="o-hum">50 %</output><input type="range" name="hum" min="5" max="100" step="1" value="50" /></label>
+            <label>Gas MQ-2 <output id="o-gas">700 mV</output><input type="range" name="gasMv" min="300" max="3000" step="10" value="700" /></label>
+            <label class="manual__check"><input type="checkbox" name="llama" /> Llama presente</label>
+            <p class="manual__prev">IR estimado: <b id="manual-ir">—</b> → nivel <b id="manual-nivel">—</b></p>
+            <button class="btn btn--pri" type="submit">Aplicar valores</button>
+          </form>
+        </div>
+        <div class="sim__bloque">
+          <h3>Acciones del operador</h3>
+          <button class="btn btn--peligro btn--bloque" data-accion="rearme">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0" /></svg>Rearme remoto
+          </button>
+          <p class="muted chico">Equivale al botón físico de rearme (GPIO23). Solo libera el nivel 3 si las condiciones ya se normalizaron.</p>
+          <button class="btn btn--sec btn--bloque" data-accion="limpiar">Limpiar historial</button>        </div>
+      </div>
+    </section>
+
+    <!-- ===== Cómo funciona ===== -->
+    <section class="card card--acerca">
+      <header class="card__head"><h2>Cómo funciona el sistema</h2></header>
+      <div class="flujo" aria-label="Recorrido de los datos">
+        <div class="flujo__paso"><span class="flujo__ic">
+          <svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2" /><path d="M9 8h6M9 12h6M9 16h3" /></svg></span>
+          <b>Nodo ESP32</b><small>DHT22 · MQ-2 · KY-026<br />mide 1 vez por segundo</small></div>
+        <div class="flujo__linea"><i></i><span>JSON</span></div>
+        <div class="flujo__paso"><span class="flujo__ic">
+          <svg viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01" /></svg></span>
+          <b>WiFi</b><small>Hotspot del celular<br />reconexión automática</small></div>
+        <div class="flujo__linea"><i></i><span>HTTP POST</span></div>
+        <div class="flujo__paso"><span class="flujo__ic">
+          <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="6" rx="1.5" /><rect x="4" y="14" width="16" height="6" rx="1.5" /><path d="M8 7h.01M8 17h.01" /></svg></span>
+          <b>Servidor SATI</b><small>/api/lecturas<br />historial y eventos</small></div>
+        <div class="flujo__linea"><i></i><span>SSE en vivo</span></div>
+        <div class="flujo__paso"><span class="flujo__ic">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4M7 13l3-3 2 2 4-4" /></svg></span>
+          <b>Panel web</b><small>Este tablero<br />cualquier dispositivo</small></div>
+      </div>
+      <div class="acerca">
+        <div>
+          <h3>Índice de riesgo</h3>
+          <p class="formula">IR = 0,70 · pGas + 0,30 · pTemp</p>
+          <p class="muted">pGas = (gas mV − 525) / (2500 − 525) × 100<br />pTemp = (T − 20) / (60 − 20) × 100<br />Ambos limitados entre 0 y 100. Para bajar de nivel el IR tiene que caer 3 puntos por debajo del umbral (histéresis).</p>
+        </div>
+        <table class="tabla tabla--niveles">
+          <thead><tr><th>Nivel</th><th>Condición</th><th>Respuesta de la maqueta</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge" data-n="0">0 · Normal</span></td><td>IR &lt; 30</td><td>LED verde</td></tr>
+            <tr><td><span class="badge" data-n="1">1 · Precaución</span></td><td>IR ≥ 30</td><td>LED amarillo</td></tr>
+            <tr><td><span class="badge" data-n="2">2 · Alerta</span></td><td>IR ≥ 52</td><td>LED rojo fijo, buzzer intermitente</td></tr>
+            <tr><td><span class="badge" data-n="3">3 · Alarma</span></td><td>IR ≥ 75, T &gt; 40 °C, pGas &gt; 85 % o llama</td><td>LED rojo parpadeando, buzzer continuo, vallas a 90° y bomba por ráfagas (3 s / 5 s, hasta 6). Queda enclavado hasta el rearme.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="pie">
+    <p><b>SATI</b> · Sistema de Alerta Temprana de Incendios — Proyecto Final de Laboratorio I</p>
+    <p class="muted">Nodo ESP32 NodeMCU-32S · Datos en tiempo real vía HTTP + Server-Sent Events</p>
+  </footer>
+
+  <div class="toasts" id="toasts" aria-live="assertive"></div>
+
+  <script type="module" src="js/operador.js"></script>
+</body>
+</html>

@@ -226,7 +226,7 @@ function renderLectura(l, nueva) {
     if (l.ir >= 75) causas.push(`IR ${fmt(l.ir)}`);
     $('#banner-detalle').textContent = `${causas.length ? 'Causa: ' + causas.join(', ') + '. ' : 'Alarma enclavada a la espera de rearme. '}Vallas cerradas y rociador activo: evacuar el sendero.`;
   }
-  document.title = nivel === 3 ? '⚠ ALARMA · SATI' : nivel === 2 ? '▲ Alerta · SATI' : 'SATI · Monitoreo de Incendios';
+  document.title = nivel === 3 ? '⚠ ALARMA · SATI' : nivel === 2 ? '▲ Alerta · SATI' : 'SATI · Panel del encargado';
   if (st.nivelPrevio !== nivel) actualizarFavicon(nivel);
   st.nivelPrevio = nivel;
 }
@@ -432,7 +432,6 @@ function conectar() {
     st.lecturas = d.historial;
     st.eventos = d.eventos;
     st.recibioInicial = true;
-    $('#clave-wrap').hidden = !d.config.admin_requerido;
     for (const k of Object.keys(spark)) spark[k] = [];
     for (const l of st.lecturas.slice(-90)) {
       spark.temp.push(l.temp); spark.hum.push(l.hum); spark.gas.push(l.p_gas); spark.llama.push(l.llama_mv);
@@ -466,7 +465,55 @@ function conectar() {
     $('#txt-conexion').textContent = 'Reconectando con el servidor…';
   };
 }
-conectar();
+
+// ---------- Acceso del encargado ----------
+const leerClave = () => { try { return sessionStorage.getItem('sati-clave') || ''; } catch { return ''; } };
+const guardarClave = (c) => { try { if (c) sessionStorage.setItem('sati-clave', c); else sessionStorage.removeItem('sati-clave'); } catch { /* sin almacenamiento */ } };
+let conectado = false;
+
+async function verificarClave(clave) {
+  const r = await fetch('api/operador/verificar', { method: 'POST', headers: { 'X-Admin-Key': clave } });
+  if (r.status === 429) throw new Error('Demasiados intentos. Esperá unos minutos y volvé a probar.');
+  return r.ok;
+}
+
+function mostrarLogin(mensaje = '') {
+  $('#login').hidden = false;
+  $('#login-error').textContent = mensaje;
+  $('#login-clave').value = '';
+  $('#login-clave').focus();
+}
+
+function entrar() {
+  $('#login').hidden = true;
+  if (!conectado) { conectado = true; conectar(); }
+}
+
+$('#login-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const clave = $('#login-clave').value.trim();
+  if (!clave) return;
+  $('#login-error').textContent = '';
+  try {
+    if (await verificarClave(clave)) { guardarClave(clave); entrar(); }
+    else mostrarLogin('Clave incorrecta.');
+  } catch (e) {
+    mostrarLogin(e.message || 'No se pudo conectar con el servidor.');
+  }
+});
+
+$('#btn-salir').addEventListener('click', () => {
+  guardarClave('');
+  location.reload();
+});
+
+(async () => {
+  const clave = leerClave();
+  try {
+    if (clave && (await verificarClave(clave))) return entrar();
+  } catch { /* se pide de nuevo */ }
+  mostrarLogin();
+})();
 
 // ---------- Ventana de tiempo ----------
 $('#ventana').addEventListener('click', (ev) => {
@@ -477,29 +524,38 @@ $('#ventana').addEventListener('click', (ev) => {
   actualizarSeries();
 });
 
-// ---------- Acciones del operador ----------
+// ---------- Acciones del encargado ----------
 async function api(ruta, cuerpo) {
-  const headers = { 'Content-Type': 'application/json' };
-  const clave = $('#clave-operador').value || leerClave();
-  if (clave) headers['X-Admin-Key'] = clave;
-  const r = await fetch(ruta, { method: 'POST', headers, body: JSON.stringify(cuerpo || {}) });
-  if (r.status === 401) {
-    $('#clave-wrap').hidden = false;
-    $('#clave-operador').focus();
-    toast({ severidad: 'warning', tipo: 'rearme', titulo: 'Clave de operador requerida', detalle: 'Ingresala en el centro de pruebas y repetí la acción.' });
-    throw new Error('401');
+  const r = await fetch(ruta, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': leerClave() },
+    body: JSON.stringify(cuerpo || {}),
+  });
+  if (r.status === 401 || r.status === 429) {
+    guardarClave('');
+    mostrarLogin(r.status === 429 ? 'Demasiados intentos. Esperá unos minutos.' : 'La sesión venció. Ingresá la clave de nuevo.');
+    throw new Error(String(r.status));
   }
-  if (clave) guardarClave(clave);
   return r.json();
 }
-const leerClave = () => { try { return sessionStorage.getItem('sati-clave') || ''; } catch { return ''; } };
-const guardarClave = (c) => { try { sessionStorage.setItem('sati-clave', c); } catch { /* sin almacenamiento */ } };
+
+async function exportarCsv() {
+  const r = await fetch('api/export.csv', { headers: { 'X-Admin-Key': leerClave() } });
+  if (!r.ok) { mostrarLogin('Ingresá la clave de nuevo.'); return; }
+  const url = URL.createObjectURL(await r.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sati_lecturas_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 document.addEventListener('click', async (ev) => {
   const b = ev.target.closest('[data-accion], [data-sim], [data-escenario]');
   if (!b) return;
   try {
-    if (b.dataset.accion === 'rearme') await api('api/rearme');
+    if (b.dataset.accion === 'exportar') await exportarCsv();
+    else if (b.dataset.accion === 'rearme') await api('api/rearme');
     else if (b.dataset.accion === 'limpiar') {
       if (confirm('¿Borrar el historial de lecturas y el registro de alertas?')) await api('api/historial/limpiar');
     } else if (b.dataset.sim) await api('api/simulador', { accion: b.dataset.sim });

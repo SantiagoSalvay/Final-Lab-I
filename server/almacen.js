@@ -84,8 +84,8 @@ class Almacen {
     return { lectura: l, eventos: this.detectar(prev, l) };
   }
 
-  evento(tipo, severidad, titulo, detalle = '', origen = null) {
-    const e = { id: ++this.idEvento, ts: Date.now(), tipo, severidad, titulo, detalle, origen };
+  evento(tipo, severidad, titulo, detalle = '', origen = null, extra = {}) {
+    const e = { id: ++this.idEvento, ts: Date.now(), tipo, severidad, titulo, detalle, origen, ...extra };
     this.eventos.push(e);
     if (this.eventos.length > this.maxEventos) this.eventos.splice(0, this.eventos.length - this.maxEventos);
     this.sucio = true;
@@ -112,7 +112,7 @@ class Almacen {
       const sube = l.nivel > p.nivel;
       ev.push(this.evento('nivel', sube ? sev[l.nivel] : 'ok',
         `${sube ? 'Sube' : 'Baja'} a nivel ${l.nivel} · ${N.nombre}`,
-        `IR ${dec(l.ir)} · T ${l.temp == null ? '—' : dec(l.temp)} °C · Gas ${dec(l.p_gas)} %`, o));
+        `IR ${dec(l.ir)} · T ${l.temp == null ? '—' : dec(l.temp)} °C · Gas ${dec(l.p_gas)} %`, o, { nivel: l.nivel, previo: p.nivel }));
     }
     if (p && l.llama && !p.llama) ev.push(this.evento('llama', 'critical', 'Llama detectada', `Sensor KY-026: ${l.llama_mv ?? '—'} mV`, o));
     if (p && !l.llama && p.llama) ev.push(this.evento('llama', 'ok', 'Llama extinguida', 'El sensor de llama volvió a valores normales', o));

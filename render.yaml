@@ -15,6 +15,7 @@ services:
       # Token que el ESP32 manda en el header X-Device-Token (copiarlo en DEVICE_TOKEN del firmware).
       - key: DEVICE_TOKEN
         sync: false
-      # Clave para los botones del operador (simulador, rearme, limpiar). Vacía = sin clave.
+      # Clave del encargado para entrar a /operador (rearme, simulador, exportar). Cargarla siempre:
+      # si queda vacía, el servidor genera una distinta en cada reinicio (se ve en los Logs de Render).
       - key: ADMIN_KEY
         sync: false
